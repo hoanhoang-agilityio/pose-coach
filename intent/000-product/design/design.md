@@ -26,7 +26,13 @@ Inputs: `intent.md` (accepted), `spec.md` (accepted), `grill.md` (Q1-Q12, no ope
 | `observability-design` | skipped | No production backend; testers' feedback comes through TestFlight / Play testing. Revisit before public release. |
 
 ## Artifacts
-- (linked here as each one is drafted)
+- design-system: [docs/design-system/design-system.md](../../../docs/design-system/design-system.md), [tokens.json](../../../docs/design-system/tokens.json), [components.md](../../../docs/design-system/components.md)
+- architecture: [architecture.md](architecture.md); ADRs [0001](../../../docs/adr/0001-react-native-expo-dev-build.md), [0002](../../../docs/adr/0002-on-device-ml-kit-pose-vision-camera.md), [0003](../../../docs/adr/0003-pure-typescript-form-rules-engine.md)
+- data-model: [data-model.md](data-model.md)
+- frontend-design: [frontend.md](frontend.md)
+- prototype: [prototype.md](prototype.md), clickable [prototype/index.html](prototype/index.html)
+- infra-design: [infra.md](infra.md)
+- test-strategy: [test-strategy.md](test-strategy.md)
 
 ## Cross-cutting decisions
 | Decision | Recommended | Reason and trade-off | Hard to change later | Owner artifact |
