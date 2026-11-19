@@ -1,0 +1,10 @@
+# ai-sdlc CODEOWNERS template. Uncomment and replace owners.
+# Branch protection: enable "Require review from Code Owners".
+# Mirror the sensitivePaths from .sdlc/config.json here so high-risk changes need 2 approvals.
+#
+# /intent/            @your-org/product-owners
+# /.github/           @your-org/platform
+# /.claude/           @your-org/platform
+# /.sdlc/             @your-org/platform
+# /src/auth/          @your-org/security @your-org/platform
+# /migrations/        @your-org/data @your-org/platform

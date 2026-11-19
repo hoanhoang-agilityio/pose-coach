@@ -1,0 +1,22 @@
+{
+  "mode": "new",
+  "testCommand": null,
+  "lintCommand": null,
+  "defaultBranch": "main",
+  "audience": "non-developer",
+  "sensitivePaths": [],
+  "codePathsAllowlist": [
+    "intent/**",
+    ".sdlc/**",
+    ".claude/**",
+    "docs/**",
+    "evals/**",
+    "CLAUDE.md",
+    "REVIEW.md",
+    "README.md"
+  ],
+  "roles": {
+    "productOwner": null,
+    "codeOwners": []
+  }
+}

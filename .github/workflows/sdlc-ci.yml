@@ -1,0 +1,119 @@
+name: sdlc-ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        if: ${{ hashFiles('package.json') != '' }}
+        with:
+          node-version: 20
+      - name: Install dependencies
+        if: ${{ hashFiles('package.json') != '' }}
+        run: |
+          if [ -f pnpm-lock.yaml ]; then npm i -g pnpm && pnpm install --frozen-lockfile
+          elif [ -f yarn.lock ]; then yarn install --frozen-lockfile
+          elif [ -f package-lock.json ]; then npm ci
+          else npm install; fi
+      - name: Run testCommand from .sdlc/config.json
+        run: |
+          CMD=$(node -e "try{const c=require('./.sdlc/config.json');process.stdout.write(c.testCommand||'')}catch(e){}")
+          if [ -z "$CMD" ]; then echo "No testCommand configured; skipping."; exit 0; fi
+          echo "Running: $CMD"
+          bash -c "$CMD"
+
+  sdlc-gate:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    env:
+      PR_BODY: ${{ github.event.pull_request.body }}
+      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: PR references an intent with an accepted plan
+        run: |
+          node -e '
+            const fs = require("fs");
+            const body = process.env.PR_BODY || "";
+            const m = /intent\/(\d{3}-[A-Za-z0-9._-]+)/.exec(body);
+            if (!m) { console.error("::error::PR body must reference intent/NNN-slug"); process.exit(1); }
+            const plan = "intent/" + m[1] + "/plan.md";
+            if (!fs.existsSync(plan)) { console.error("::error::" + plan + " not found"); process.exit(1); }
+            const fm = /^\s*---\r?\n([\s\S]*?)\r?\n---/.exec(fs.readFileSync(plan, "utf8"));
+            const ok = fm && /^status:\s*["\x27]?accepted\b/im.test(fm[1]);
+            if (!ok) { console.error("::error::" + plan + " is not status: accepted"); process.exit(1); }
+            console.log("OK: " + plan + " is accepted");
+          '
+      - name: Agents did not accept artifacts
+        run: |
+          fail=0
+          for c in $(git rev-list "$BASE_SHA..$HEAD_SHA"); do
+            if git show --format= -U0 "$c" | grep -Eiq '^\+\s*status:\s*["'"'"']?accepted'; then
+              if git log -1 --format=%B "$c" | grep -qi 'Co-Authored-By: Claude'; then
+                echo "::error::Commit $c sets status: accepted but has a Claude co-author trailer"
+                fail=1
+              fi
+            fi
+          done
+          exit $fail
+      - name: Notice on sensitivePaths
+        run: |
+          node -e '
+            const fs = require("fs");
+            const { execSync } = require("child_process");
+            let cfg = {};
+            try { cfg = JSON.parse(fs.readFileSync(".sdlc/config.json", "utf8")); } catch {}
+            const globs = cfg.sensitivePaths || [];
+            if (!globs.length) process.exit(0);
+            const re = (g) => new RegExp("^" + g.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*\*\//g, "\u0001").replace(/\*\*/g, "\u0002").replace(/\*/g, "[^/]*").replace(/\u0001/g, "(?:.*/)?").replace(/\u0002/g, ".*") + "$");
+            const files = execSync("git diff --name-only " + process.env.BASE_SHA + "..." + process.env.HEAD_SHA).toString().split("\n").filter(Boolean);
+            const hit = files.filter((f) => globs.some((g) => re(g).test(f) || f.startsWith(g.replace(/\/?$/, "/"))));
+            if (hit.length) console.log("::notice::This PR touches sensitivePaths: " + hit.join(", ") + ". Treat as risk >= medium; high risk requires 2 approvals via CODEOWNERS.");
+          '
+      - name: Warn when the gate was bypassed
+        run: |
+          if git diff --name-only "$BASE_SHA...$HEAD_SHA" | grep -qx '.sdlc/bypass.log'; then
+            echo "::warning::.sdlc/bypass.log changed in this PR: SDLC_GATE=off was used. Review why."
+          fi
+
+  # Optional: runs only when the ANTHROPIC_API_KEY secret is set (otherwise steps are skipped).
+  security-review:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        if: ${{ env.HAS_KEY == 'true' }}
+        with:
+          fetch-depth: 2
+      - uses: anthropics/claude-code-security-review@main
+        if: ${{ env.HAS_KEY == 'true' }}
+        with:
+          claude-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          comment-pr: true
+      - name: Skipped
+        if: ${{ env.HAS_KEY != 'true' }}
+        run: echo "ANTHROPIC_API_KEY not set; security review is optional and was skipped."
+
+  deploy:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production   # configure required reviewers on this environment
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy (placeholder)
+        run: echo "Replace with your deploy step. A human approved the production environment."
