@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pose Coach - Bản mẫu</title>
+<style>
+/* Tokens copied from docs/design-system/tokens.json */
+:root{
+  --color-background:#0B0F14; --color-surface:#18202A; --color-text:#FFFFFF; --color-text-muted:#B8C2CC;
+  --color-primary:#4D9BFF; --color-on-primary:#0B0F14; --color-success:#2EE06B; --color-danger:#FF5C61;
+  --color-warning:#FFC83D; --color-border:#6B7A8C; --color-focus:#FFD84D; --color-scrim:rgba(11,15,20,.72);
+  --font:system-ui,-apple-system,Roboto,sans-serif;
+  --fs-body:18px; --fs-label:20px; --fs-title:28px; --fs-heading:36px; --fs-display:64px; --fs-counter:120px;
+  --sp-1:4px; --sp-2:8px; --sp-3:16px; --sp-4:24px; --sp-5:32px; --gutter:16px;
+  --touch:56px; --touch-primary:72px; --stroke:6px;
+  --r-sm:8px; --r-md:16px; --r-pill:999px;
+  --t-fast:120ms; --t-normal:240ms; --ease:ease-out;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:#05080b;color:var(--color-text);font-family:var(--font);font-size:var(--fs-body);line-height:1.3;font-weight:500}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:3px solid var(--color-focus);outline-offset:2px}
+.layout{display:flex;gap:32px;justify-content:center;align-items:flex-start;padding:24px var(--gutter);flex-wrap:wrap}
+.phone{width:390px;max-width:100%;height:780px;background:var(--color-background);border:8px solid #2a333e;border-radius:44px;position:relative;overflow:hidden;flex:none}
+.screen{position:absolute;inset:0;display:none;flex-direction:column;padding:48px var(--gutter) var(--gutter)}
+.screen.active{display:flex}
+h1,h2,p{margin:0}
+h1{font-size:var(--fs-heading);font-weight:800}
+h2{font-size:var(--fs-title);font-weight:800}
+.muted{color:var(--color-text-muted)}
+.btn{min-height:var(--touch);border-radius:var(--r-md);border:2px solid var(--color-border);background:transparent;padding:0 var(--sp-4);font-size:var(--fs-label);font-weight:800;width:100%}
+.btn.primary{min-height:var(--touch-primary);background:var(--color-primary);border-color:var(--color-primary);color:var(--color-on-primary)}
+.btn.text{border:none;text-decoration:underline;width:auto}
+.btn:active{filter:brightness(.85)}
+.btn[disabled]{opacity:.5}
+.stack{display:flex;flex-direction:column;gap:var(--sp-3)}
+.grow{flex:1}
+.banner{border-left:6px solid var(--color-primary);background:var(--color-surface);border-radius:var(--r-sm);padding:var(--sp-3)}
+.banner.warn{border-color:var(--color-warning)}
+.banner .btn{margin-top:var(--sp-2);min-height:var(--touch);width:auto}
+.card{width:100%;min-height:96px;background:var(--color-surface);border:2px solid var(--color-border);border-radius:var(--r-md);padding:var(--sp-3) var(--sp-4);text-align:left;display:flex;flex-direction:column;justify-content:center;gap:4px}
+.card b{font-size:var(--fs-heading);font-weight:800}
+.header{display:flex;align-items:center;gap:var(--sp-2);margin-bottom:var(--sp-3)}
+.header .btn{width:var(--touch);padding:0}
+.cam{position:relative;flex:1;border-radius:var(--r-md);overflow:hidden;background:linear-gradient(160deg,#27323f,#10161d 60%,#1b2530);margin-bottom:var(--sp-3)}
+.cam .label{position:absolute;top:8px;left:8px;background:var(--color-scrim);padding:4px 10px;border-radius:var(--r-sm);font-size:var(--fs-body)}
+.cam svg.fig{position:absolute;inset:0;width:100%;height:100%}
+.guide{position:absolute;inset:28px 24px;border:4px dashed #fff;border-radius:var(--r-md);transition:border-color var(--t-fast)}
+.guide.ok{border:4px solid var(--color-success)}
+.status{font-size:var(--fs-title);font-weight:800;text-align:center;min-height:2.6em}
+.bar{height:12px;background:var(--color-surface);border-radius:var(--r-pill);overflow:hidden;border:1px solid var(--color-border)}
+.bar i{display:block;height:100%;width:0;background:var(--color-success)}
+.tip{display:flex;gap:var(--sp-3);align-items:center;background:var(--color-surface);border-radius:var(--r-md);padding:var(--sp-3);margin-bottom:var(--sp-3)}
+.tip svg{flex:none;width:72px;height:72px}
+.countdown{position:absolute;inset:0;background:var(--color-scrim);display:none;align-items:center;justify-content:center;font-size:160px;font-weight:800}
+.countdown.on{display:flex}
+.counter{position:absolute;top:8px;left:0;right:0;text-align:center;font-size:var(--fs-counter);font-weight:800;line-height:1;text-shadow:0 2px 8px #000}
+.counter small{display:block;font-size:var(--fs-label);color:var(--color-text-muted);font-weight:500;text-shadow:none}
+.counter.paused{opacity:.45}
+.pausebadge{position:absolute;top:150px;left:50%;transform:translateX(-50%);background:var(--color-warning);color:#0B0F14;padding:4px 14px;border-radius:var(--r-pill);font-weight:800;display:none}
+.caption{position:absolute;left:8px;right:8px;bottom:8px;background:var(--color-scrim);border-radius:var(--r-md);padding:var(--sp-3);font-size:var(--fs-title);font-weight:800;text-align:center;min-height:68px;display:flex;align-items:center;justify-content:center}
+.seg{stroke:var(--color-success);stroke-width:var(--stroke);fill:none;stroke-linecap:round;stroke-linejoin:round}
+.bad .seg.part, .seg.part.bad{stroke:var(--color-danger);stroke-dasharray:10 8;stroke-width:9}
+.simrow{display:flex;gap:var(--sp-2);margin-bottom:var(--sp-2)}
+.simrow .btn{min-height:var(--touch);font-size:var(--fs-body)}
+.badge{width:200px;height:200px;border-radius:50%;margin:var(--sp-3) auto;display:flex;flex-direction:column;align-items:center;justify-content:center;border:14px solid var(--color-success)}
+.badge b{font-size:var(--fs-display);font-weight:800;line-height:1}
+.badge.mid{border-color:var(--color-warning)} .badge.low{border-color:var(--color-danger)}
+.kv{background:var(--color-surface);border-radius:var(--r-md);padding:var(--sp-3);display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.kv b{font-size:var(--fs-title);font-weight:800;text-align:right}
+.list{list-style:none;margin:0;padding:0;overflow:auto;flex:1;display:flex;flex-direction:column;gap:var(--sp-2)}
+.item{min-height:72px;background:var(--color-surface);border-radius:var(--r-md);padding:var(--sp-2) var(--sp-3);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.item .sc{font-size:var(--fs-title);font-weight:800}
+.empty{text-align:center;padding:var(--sp-5) var(--sp-3)}
+.side{width:360px;max-width:100%;font-size:16px}
+.side h2{font-size:22px;margin-bottom:8px}
+.side table{border-collapse:collapse;width:100%;margin-bottom:16px}
+.side td,.side th{border-bottom:1px solid #2a333e;padding:6px 4px;text-align:left;vertical-align:top}
+.side .btn{min-height:44px;font-size:16px;margin-bottom:8px;width:auto}
+.side label{display:block;margin:6px 0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="layout">
+<div class="phone" id="phone">
+
+<!-- S1 Home -->
+<section class="screen active" id="home" aria-labelledby="homeTitle">
+  <div class="stack grow">
+    <h1 id="homeTitle">Pose Coach</h1>
+    <p class="muted">Chọn bài tập</p>
+    <div class="banner" id="note" role="note">
+      <p>Pose Coach đưa ra gợi ý về tư thế, không phải lời khuyên y tế.</p>
+      <button class="btn" id="noteOk">Đã hiểu</button>
+    </div>
+    <button class="card" data-ex="squat"><b>Squat</b><span class="muted">Hạ người xuống rồi đứng lên, đếm số lần</span></button>
+    <button class="card" data-ex="pushup"><b>Hít đất</b><span class="muted">Đếm số lần, nhìn nghiêng</span></button>
+    <button class="card" data-ex="plank"><b>Plank</b><span class="muted">Tính giờ khi đúng tư thế</span></button>
+  </div>
+  <button class="btn text" id="toHistory">Lịch sử</button>
+</section>
+
+<!-- S2 Setup -->
+<section class="screen" id="setup" aria-labelledby="setupTitle">
+  <div class="header"><button class="btn" data-go="home" aria-label="Quay lại">&larr;</button><h2 id="setupTitle">Vào khung hình</h2></div>
+  <div class="tip" id="tip">
+    <svg viewBox="0 0 72 72" aria-hidden="true" id="tipSvg"></svg>
+    <p id="tipText"></p>
+  </div>
+  <div class="cam" id="setupCam">
+    <span class="label">Camera (mô phỏng)</span>
+    <svg class="fig" viewBox="0 0 200 300" aria-hidden="true"><g id="setupFig" opacity=".35"></g></svg>
+    <div class="guide" id="guide"></div>
+    <div class="countdown" id="cd" aria-live="assertive">3</div>
+  </div>
+  <p class="status" id="status" aria-live="polite">Lùi lại một chút</p>
+  <div class="bar" aria-hidden="true"><i id="hold"></i></div>
+  <div class="simrow" style="margin-top:12px">
+    <button class="btn" id="simOut">Mô phỏng: ra khỏi khung</button>
+    <button class="btn" id="simIn">Mô phỏng: trong khung</button>
+  </div>
+</section>
+
+<!-- S3 Workout -->
+<section class="screen" id="workout" aria-label="Đang tập" style="padding-top:40px">
+  <div class="cam" style="margin-bottom:var(--sp-3)">
+    <div class="counter" id="counter" aria-live="polite"><span id="num">0</span><small id="unit">lần</small></div>
+    <div class="pausebadge" id="pause">Tạm dừng</div>
+    <svg class="fig" id="figWrap" viewBox="0 0 200 300" aria-label="Khung xương trên hình camera"></svg>
+    <div class="caption" id="caption" aria-live="polite"></div>
+  </div>
+  <div class="simrow">
+    <button class="btn" id="simBad">Mô phỏng: sai tư thế</button>
+    <button class="btn" id="simGood">Mô phỏng: đúng</button>
+  </div>
+  <button class="btn primary" id="stop">Dừng</button>
+</section>
+
+<!-- S4 Summary -->
+<section class="screen" id="summary" aria-labelledby="sumTitle">
+  <h2 id="sumTitle">Kết quả</h2>
+  <div class="stack grow">
+    <div class="kv"><span class="muted">Bài tập</span><b id="sEx"></b></div>
+    <div class="kv"><span class="muted" id="sLabel">Số lần</span><b id="sVal"></b></div>
+    <div class="badge" id="badge" role="img" aria-label=""><b id="sScore"></b><span class="muted">/ 100 điểm</span></div>
+    <div class="kv"><span class="muted">Lỗi hay gặp nhất</span><b id="sMist"></b></div>
+  </div>
+  <div class="stack">
+    <button class="btn primary" id="again">Tập tiếp</button>
+    <button class="btn" data-go="home">Về trang chủ</button>
+  </div>
+</section>
+
+<!-- S5 History -->
+<section class="screen" id="history" aria-labelledby="hisTitle">
+  <div class="header"><button class="btn" data-go="home" aria-label="Quay lại">&larr;</button><h2 id="hisTitle">Lịch sử</h2></div>
+  <ul class="list" id="hisList"></ul>
+  <div class="empty" id="hisEmpty" hidden>
+    <h2>Chưa có buổi tập nào</h2><p class="muted" style="margin:12px 0 24px">Tập một bài để xem kết quả ở đây.</p>
+    <button class="btn primary" data-go="home">Bắt đầu tập</button>
+  </div>
+  <div class="empty" id="hisErr" hidden>
+    <h2>Không đọc được lịch sử</h2><p class="muted" style="margin:12px 0 24px">Thử lại sau giây lát.</p>
+    <button class="btn primary" id="retry">Thử lại</button>
+  </div>
+</section>
+
+</div>
+
+<aside class="side">
+  <h2>Bản mẫu Pose Coach</h2>
+  <p class="muted" style="margin-bottom:12px">Bấm trong khung điện thoại như dùng thật. Dữ liệu là giả, không có camera thật.</p>
+  <table>
+    <tr><th>Màn hình</th><th>Tiêu chí</th></tr>
+    <tr><td><button class="btn" data-go="home">Trang chủ</button></td><td>AC4, AC12</td></tr>
+    <tr><td><button class="btn" data-open="setup">Chuẩn bị</button></td><td>AC2</td></tr>
+    <tr><td><button class="btn" data-open="workout">Đang tập</button></td><td>AC5, AC6, AC7, AC8, AC11</td></tr>
+    <tr><td><button class="btn" data-open="summary">Kết quả</button></td><td>AC9</td></tr>
+    <tr><td><button class="btn" data-go="history">Lịch sử</button></td><td>AC9</td></tr>
+  </table>
+  <p class="muted">AC1, AC3 và AC10: không thấy trên giao diện (cài đặt, không mạng, không đăng nhập). Màn hình không có ô đăng nhập.</p>
+  <h2 style="margin-top:16px">Trạng thái mẫu</h2>
+  <label><input type="checkbox" id="optEmpty"> Lịch sử trống</label>
+  <label><input type="checkbox" id="optErr"> Lỗi đọc lịch sử</label>
+  <label><input type="checkbox" id="optNote" checked> Hiện ghi chú lần đầu mở app</label>
+</aside>
+</div>
+
+<script>
+(function(){
+  var EX={
+    squat:{name:'Squat',unit:'lần',tip:'Đặt máy cách 2-3 m, nhìn thẳng hoặc chéo 45 độ. Thấy cả đầu đến chân.',err:'Đầu gối chụm vào trong',cue:'Mở gối ra',side:false},
+    pushup:{name:'Hít đất',unit:'lần',tip:'Đặt máy ở bên hông bạn, cách 2-3 m, chụp nghiêng. Thấy cả đầu đến chân.',err:'Hông võng xuống',cue:'Siết bụng, nâng hông',side:true},
+    plank:{name:'Plank',unit:'giây',tip:'Đặt máy ở bên hông bạn, cách 2-3 m, chụp nghiêng. Thấy cả đầu đến chân.',err:'Hông võng xuống',cue:'Nâng hông lên',side:true}
+  };
+  var ex='squat', timers=[], bad=false, count=0, lastCue=0;
+  var history=[
+    {d:'Hôm qua 18:40',ex:'Plank',v:'45 giây',s:88},
+    {d:'Hôm qua 18:30',ex:'Hít đất',v:'10 lần',s:74},
+    {d:'17/11 07:15',ex:'Squat',v:'12 lần',s:92},
+    {d:'15/11 19:02',ex:'Squat',v:'8 lần',s:65}
+  ];
+  var $=function(id){return document.getElementById(id)};
+  function clear(){timers.forEach(function(t){clearInterval(t);clearTimeout(t)});timers=[]}
+  function show(id){
+    clear();
+    document.querySelectorAll('.screen').forEach(function(s){s.classList.toggle('active',s.id===id)});
+    if(id==='home'){$('note').hidden=!$('optNote').checked}
+    if(id==='setup')startSetup();
+    if(id==='workout')startWorkout();
+    if(id==='history')renderHistory();
+  }
+  document.querySelectorAll('[data-go]').forEach(function(b){b.addEventListener('click',function(){show(b.dataset.go)})});
+  document.querySelectorAll('[data-open]').forEach(function(b){b.addEventListener('click',function(){
+    if(b.dataset.open==='summary'){finish(true)}else show(b.dataset.open)})});
+  document.querySelectorAll('[data-ex]').forEach(function(b){b.addEventListener('click',function(){ex=b.dataset.ex;show('setup')})});
+  $('toHistory').addEventListener('click',function(){show('history')});
+  $('noteOk').addEventListener('click',function(){$('optNote').checked=false;$('note').hidden=true});
+  $('optNote').addEventListener('change',function(){$('note').hidden=!this.checked});
+
+  function figure(side,badPart){
+    if(!side){
+      return '<circle class="seg" cx="100" cy="40" r="16"/>'+
+      '<path class="seg" d="M70 78H130M100 78V170M80 170H120M70 78L52 125L60 168M130 78L148 125L140 168"/>'+
+      '<path class="seg part'+(badPart?' bad':'')+'" d="M80 170L74 230L78 285M120 170L126 230L122 285"/>';
+    }
+    return       '<circle class="seg" cx="34" cy="118" r="14"/>'+
+      '<path class="seg" d="M52 128L100 134M56 130L56 190"/>'+
+      '<path class="seg part'+(badPart?' bad':'')+'" d="M100 134L170 140"/>'+
+      '<path class="seg" d="M170 140L240 152"/>';
+  }
+  function drawFig(el,side,badPart){el.innerHTML=figure(side,badPart)}
+  var sideView=function(){return EX[ex].side};
+
+  /* Setup */
+  var inFrame=false, held=0;
+  function startSetup(){
+    var e=EX[ex];
+    $('setupTitle').textContent='Chuẩn bị: '+e.name;
+    $('tipText').textContent=e.tip;
+    $('tipSvg').innerHTML=e.side?'<rect x="6" y="40" width="40" height="14" rx="6" fill="#B8C2CC"/><rect x="52" y="20" width="10" height="34" rx="3" fill="#4D9BFF"/>':'<circle cx="26" cy="20" r="8" fill="#B8C2CC"/><rect x="18" y="30" width="16" height="30" rx="5" fill="#B8C2CC"/><rect x="52" y="20" width="10" height="34" rx="3" fill="#4D9BFF"/>';
+    drawFig($('setupFig'),e.side,false);
+    $('setupFig').parentNode.setAttribute('viewBox',e.side?'0 0 300 300':'0 0 200 300');
+    setFrame(false);
+  }
+  function setFrame(v){
+    inFrame=v;held=0;$('hold').style.width='0';$('cd').classList.remove('on');
+    $('guide').classList.toggle('ok',v);
+    $('status').textContent=v?'Đã thấy bạn, giữ yên':'Lùi lại một chút';
+    clear();
+    if(v){
+      timers.push(setInterval(function(){
+        held+=100;$('hold').style.width=Math.min(100,held/20)+'%';
+        if(held>=2000){clear();countdown()}
+      },100));
+    }
+  }
+  function countdown(){
+    var n=3;$('cd').classList.add('on');$('cd').textContent=n;$('status').textContent='Sẵn sàng';
+    timers.push(setInterval(function(){
+      n--;
+      if(n>0){$('cd').textContent=n}else{clear();show('workout')}
+    },1000));
+  }
+  $('simIn').addEventListener('click',function(){setFrame(true)});
+  $('simOut').addEventListener('click',function(){setFrame(false)});
+
+  /* Workout */
+  function setBad(v){
+    bad=v;
+    drawFig($('figWrap'),sideView(),v);
+    $('pause').style.display=(v&&ex==='plank')?'block':'none';
+    $('counter').classList.toggle('paused',v&&ex==='plank');
+    var c=$('caption');
+    if(v){
+      var now=Date.now();
+      if(now-lastCue>=2000){lastCue=now;c.textContent=EX[ex].cue;
+        timers.push(setTimeout(function(){if(bad)c.textContent=''},2000))}
+    }else c.textContent='';
+  }
+  var badTicks=0,total=0;
+  function startWorkout(){
+    count=0;badTicks=0;total=0;bad=false;lastCue=0;
+    var e=EX[ex];
+    $('figWrap').setAttribute('viewBox',e.side?'0 0 300 300':'0 0 200 300');
+    $('unit').textContent=e.unit;$('num').textContent='0';
+    setBad(false);
+    $('caption').textContent='Bắt đầu!';
+    timers.push(setTimeout(function(){if(!bad)$('caption').textContent=''},1500));
+    timers.push(setInterval(function(){
+      total++; if(bad)badTicks++;
+      if(ex==='plank'){ if(!bad){count++;$('num').textContent=count} }
+      else if(total%2===0 && !bad){count++;$('num').textContent=count}
+    },1000));
+  }
+  $('simBad').addEventListener('click',function(){setBad(true)});
+  $('simGood').addEventListener('click',function(){setBad(false)});
+  $('stop').addEventListener('click',function(){finish(false)});
+
+  /* Summary */
+  function finish(demo){
+    var e=EX[ex],n,score,mist;
+    if(demo){n=ex==='plank'?45:8;score=ex==='squat'?82:74;mist=e.err}
+    else{
+      n=count;
+      if(n===0){score=null;mist='Chưa đếm được lần nào'}
+      else{score=Math.round(100*(1-(badTicks/Math.max(total,1))));mist=badTicks>0?e.err:'Không có lỗi'}
+    }
+    show('summary');
+    $('sEx').textContent=e.name;
+    $('sLabel').textContent=ex==='plank'?'Thời gian đúng tư thế':'Số lần';
+    $('sVal').textContent=n+' '+e.unit;
+    if(score===null){$('sScore').textContent='--'}else $('sScore').textContent=score;
+    var b=$('badge');b.className='badge'+(score===null?' low':score>=80?'':score>=50?' mid':' low');
+    b.setAttribute('aria-label','Điểm '+(score===null?'không có':score+' trên 100'));
+    $('sMist').textContent=mist;
+    if(score!==null)history.unshift({d:'Vừa xong',ex:e.name,v:n+' '+e.unit,s:score});
+  }
+  $('again').addEventListener('click',function(){show('setup')});
+
+  /* History */
+  function renderHistory(){
+    var list=$('hisList');list.innerHTML='';
+    var err=$('optErr').checked, empty=$('optEmpty').checked||history.length===0;
+    $('hisErr').hidden=!err; $('hisEmpty').hidden=err||!empty; list.hidden=err||empty;
+    if(err||empty)return;
+    history.forEach(function(h){
+      var li=document.createElement('li');li.className='item';
+      li.innerHTML='<div><b>'+h.ex+' - '+h.v+'</b><div class="muted">'+h.d+'</div></div><span class="sc">'+h.s+'</span>';
+      list.appendChild(li);
+    });
+  }
+  $('retry').addEventListener('click',function(){$('optErr').checked=false;renderHistory()});
+  $('optEmpty').addEventListener('change',renderHistory);
+  $('optErr').addEventListener('change',renderHistory);
+})();
+</script>
+</body>
+</html>
