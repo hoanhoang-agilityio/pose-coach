@@ -1,5 +1,15 @@
 # pose-coach
 
+## Product (draft, from intent/000-product)
+Pose Coach: free iOS + Android app that counts reps and gives live posture
+feedback (voice cues + green/red body outline) for squat, push-up and plank.
+All analysis runs on the phone; video never leaves the device. No login or cloud in v1.
+Audience: Vietnamese first, i18n-ready. Team: Hoan + Claude.
+
+Proposed stack (pending Hoan's confirmation): React Native + Expo (dev build),
+react-native-vision-camera + Google ML Kit Pose Detection, expo-speech, expo-sqlite, Jest.
+Commands: none yet (added after the project skeleton exists).
+
 <!-- ai-sdlc:start -->
 ## AI-native SDLC (managed by ai-sdlc)
 
