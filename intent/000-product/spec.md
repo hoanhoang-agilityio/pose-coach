@@ -1,5 +1,5 @@
 ---
-status: draft        # draft | accepted | rejected (only a human sets accepted)
+status: accepted        # draft | accepted | rejected (only a human sets accepted)
 risk: medium         # low | medium | high
 accepted_by:
 accepted_at:
