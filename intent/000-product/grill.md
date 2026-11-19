@@ -51,3 +51,13 @@ All answers 2026-11-19: Hoan replied "approve" = accept every recommendation as 
 
 ## Open questions
 - Repo: Hoan chose 2026-11-19 to keep artifacts in project files for now; move to a repo (proposed hoanhoang-agilityio/pose-coach) later.
+
+## Round 2: design open questions (answered by Hoan 2026-11-19, "approve" = all recommendations)
+- D1. App name and id: "Pose Coach", bundle/package id `com.hoanhoang.posecoach`. **Hard to change later**
+- D2. Apple ($99/yr) and Google ($25 once) developer accounts: register when the first test build is needed.
+- D3. Speed-check phones: use phones Hoan already has in the iPhone 11 / Galaxy A52 class.
+- D4. Test videos: Hoan records ~10 per exercise (correct + each error); consent from anyone else filmed; keep pose JSON only, delete videos.
+- D5. Auto-end a set after 5 s out of frame.
+- D6. History: "delete all" only in v1.
+- D7. Haptics: not in v1.
+- D8. Vietnamese cue wording: Hoan reviews in the prototype and edits any that sound unnatural.

@@ -54,4 +54,5 @@ Inputs: `intent.md` (accepted), `spec.md` (accepted), `grill.md` (Q1-Q12, no ope
 - Q9 success metric -> test-strategy.
 
 ## Open questions
-- None blocking. Hoan may edit `requires:` before accepting.
+- None blocking. Discipline open questions D1-D8 were answered by Hoan on 2026-11-19 (see `grill.md` Round 2). Remaining technical choices (pose plugin source, ML Kit base vs accurate model) are recommended in `architecture.md` and settled in `plan`.
+- Hoan may edit `requires:` before accepting.
