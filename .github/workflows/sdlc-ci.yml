@@ -4,6 +4,11 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: PR number to re-run the SDLC gate for (used by sdlc-accept)
+        required: true
 
 jobs:
   test:
@@ -29,35 +34,96 @@ jobs:
           bash -c "$CMD"
 
   sdlc-gate:
-    if: ${{ github.event_name == 'pull_request' }}
+    if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     env:
-      PR_BODY: ${{ github.event.pull_request.body }}
-      BASE_SHA: ${{ github.event.pull_request.base.sha }}
-      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      GH_TOKEN: ${{ github.token }}
+      EV_BODY: ${{ github.event.pull_request.body }}
+      EV_BASE: ${{ github.event.pull_request.base.sha }}
+      EV_HEAD: ${{ github.event.pull_request.head.sha }}
+      DISPATCH_PR: ${{ inputs.pr }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: PR references an intent with an accepted plan
+      - name: Resolve PR body and range
+        run: |
+          if [ -n "$DISPATCH_PR" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/pulls/$DISPATCH_PR" > "$RUNNER_TEMP/pr.json"
+            node -e 'const p=require(process.argv[1]);require("fs").writeFileSync(process.argv[2],p.body||"");console.log(p.base.sha+" "+p.head.sha)' "$RUNNER_TEMP/pr.json" "$RUNNER_TEMP/pr_body.txt" > "$RUNNER_TEMP/range.txt"
+          else
+            printf '%s' "$EV_BODY" > "$RUNNER_TEMP/pr_body.txt"
+            echo "$EV_BASE $EV_HEAD" > "$RUNNER_TEMP/range.txt"
+          fi
+          read -r BASE HEAD < "$RUNNER_TEMP/range.txt"
+          echo "BASE_SHA=$BASE" >> "$GITHUB_ENV"
+          echo "HEAD_SHA=$HEAD" >> "$GITHUB_ENV"
+          echo "PR_BODY_FILE=$RUNNER_TEMP/pr_body.txt" >> "$GITHUB_ENV"
+      - name: PR references a change with an accepted (or trivial) plan
         run: |
           node -e '
             const fs = require("fs");
-            const body = process.env.PR_BODY || "";
+            const { execSync } = require("child_process");
+            const files = execSync("git diff --name-only " + process.env.BASE_SHA + "..." + process.env.HEAD_SHA).toString().split("\n").filter(Boolean);
+            if (files.every((f) => /^(intent|docs)\//.test(f) || /^[^\/]+\.md$/.test(f))) {
+              console.log("::notice::Docs-only PR (intent/, docs/, root *.md): no accepted plan required.");
+              process.exit(0);
+            }
+            let lock = {};
+            try { lock = JSON.parse(fs.readFileSync(".sdlc/kit-lock.json", "utf8")).files || {}; } catch {}
+            try { Object.assign(lock, JSON.parse(execSync("git show " + process.env.BASE_SHA + ":.sdlc/kit-lock.json").toString()).files || {}); } catch {}
+            const kitMeta = [".sdlc/kit-lock.json", ".claude/settings.json", ".gitignore", "CLAUDE.md"];
+            if (files.every((f) => f in lock || kitMeta.includes(f) || /^(intent|docs)\//.test(f) || /^[^\/]+\.md$/.test(f))) {
+              console.log("::notice::Kit update PR (only ai-sdlc kit files): no accepted plan required. Review the kit diff.");
+              process.exit(0);
+            }
+            const body = fs.readFileSync(process.env.PR_BODY_FILE, "utf8");
             const m = /intent\/(\d{3}-[A-Za-z0-9._-]+)/.exec(body);
             if (!m) { console.error("::error::PR body must reference intent/NNN-slug"); process.exit(1); }
             const plan = "intent/" + m[1] + "/plan.md";
             if (!fs.existsSync(plan)) { console.error("::error::" + plan + " not found"); process.exit(1); }
-            const fm = /^\s*---\r?\n([\s\S]*?)\r?\n---/.exec(fs.readFileSync(plan, "utf8"));
-            const ok = fm && /^status:\s*["\x27]?accepted\b/im.test(fm[1]);
-            if (!ok) { console.error("::error::" + plan + " is not status: accepted"); process.exit(1); }
-            console.log("OK: " + plan + " is accepted");
+            const fmOf = (f) => (fs.existsSync(f) && (/^\s*---\r?\n([\s\S]*?)\r?\n---/.exec(fs.readFileSync(f, "utf8")) || [])[1]) || "";
+            const get = (fm, k) => ((new RegExp("^" + k + ":[ \\t]*[\"\x27]?([A-Za-z]+)", "im").exec(fm)) || [])[1] || "";
+            const dir = "intent/" + m[1] + "/";
+            const planFm = fmOf(plan);
+            const specFm = fmOf(dir + "spec.md");
+            const R = ["trivial", "low", "medium", "high"];
+            const ranks = [get(specFm, "risk") || get(fmOf(dir + "intent.md"), "risk"), get(planFm, "risk")].map((r) => R.indexOf(r.toLowerCase())).filter((r) => r >= 0);
+            const risk = ranks.length ? R[Math.max(...ranks)] : "unknown";
+            const accepted = (fm) => /^accepted$/i.test(get(fm, "status"));
+            if (risk === "trivial") {
+              let cfg = {};
+              try { cfg = JSON.parse(fs.readFileSync(".sdlc/config.json", "utf8")); } catch {}
+              const re = (g) => new RegExp("^" + g.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*\*\//g, "\u0001").replace(/\*\*/g, "\u0002").replace(/\*/g, "[^/]*").replace(/\u0001/g, "(?:.*/)?").replace(/\u0002/g, ".*") + "$");
+              const code = files.filter((f) => !/^(intent|docs|\.sdlc)\//.test(f));
+              const sens = code.filter((f) => (cfg.sensitivePaths || []).some((g) => re(g).test(f) || f.startsWith(g.replace(/\/?$/, "/"))));
+              if (code.length > 3 || sens.length) {
+                console.error("::error::" + plan + " says risk: trivial but this PR changes " + code.length + " files outside intent/, docs/ and .sdlc/" + (sens.length ? " including sensitivePaths (" + sens.join(", ") + ")" : "") + ". Set risk: low (or higher) and get the plan accepted.");
+                process.exit(1);
+              }
+              console.log("OK: trivial plan, " + code.length + " code file(s)");
+              process.exit(0);
+            }
+            const missing = [];
+            if (!accepted(planFm)) missing.push(plan + " (comment /accept plan)");
+            if (risk === "medium" || risk === "high") {
+              if (!accepted(specFm)) missing.push(dir + "spec.md (comment /accept spec)");
+              if (!accepted(fmOf(dir + "design/design.md"))) missing.push(dir + "design/design.md (comment /accept design)");
+            }
+            if (missing.length) { console.error("::error::Risk " + risk + ": these must be status: accepted: " + missing.join(", ")); process.exit(1); }
+            console.log("OK: risk " + risk + ", required artifacts accepted");
           '
       - name: Agents did not accept artifacts
         run: |
           fail=0
           for c in $(git rev-list "$BASE_SHA..$HEAD_SHA"); do
             if git show --format= -U0 "$c" | grep -Eiq '^\+\s*status:\s*["'"'"']?accepted'; then
+              if [ "$(git log -1 --format=%an "$c")" = "github-actions[bot]" ] && git log -1 --format=%B "$c" | grep -q '^Accepted-by:'; then
+                continue
+              fi
               if git log -1 --format=%B "$c" | grep -qi 'Co-Authored-By: Claude'; then
                 echo "::error::Commit $c sets status: accepted but has a Claude co-author trailer"
                 fail=1
@@ -77,7 +143,7 @@ jobs:
             const re = (g) => new RegExp("^" + g.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*\*\//g, "\u0001").replace(/\*\*/g, "\u0002").replace(/\*/g, "[^/]*").replace(/\u0001/g, "(?:.*/)?").replace(/\u0002/g, ".*") + "$");
             const files = execSync("git diff --name-only " + process.env.BASE_SHA + "..." + process.env.HEAD_SHA).toString().split("\n").filter(Boolean);
             const hit = files.filter((f) => globs.some((g) => re(g).test(f) || f.startsWith(g.replace(/\/?$/, "/"))));
-            if (hit.length) console.log("::notice::This PR touches sensitivePaths: " + hit.join(", ") + ". Treat as risk >= medium; high risk requires 2 approvals via CODEOWNERS.");
+            if (hit.length) console.log("::notice::This PR touches sensitivePaths: " + hit.join(", ") + ". Treat this as risk high: design.md needs a ## Security section and CODEOWNERS should require 2 approvals.");
           '
       - name: Warn when the gate was bypassed
         run: |

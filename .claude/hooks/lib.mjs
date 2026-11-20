@@ -127,46 +127,30 @@ export function activeChange(root) {
   } catch { return null; }
 }
 
-/** Discipline skill -> artifact path (relative to the change dir, or to the repo root when it starts with docs/). */
-export const DESIGN_FILES = {
-  architecture: 'design/architecture.md',
-  prototype: 'design/prototype.md',
-  'design-system': 'docs/design-system/design-system.md',
-  'frontend-design': 'design/frontend.md',
-  'api-design': 'design/api.md',
-  'backend-design': 'design/backend.md',
-  'data-model': 'design/data-model.md',
-  'infra-design': 'design/infra.md',
-  'security-design': 'design/security.md',
-  'test-strategy': 'design/test-strategy.md',
-  'observability-design': 'design/observability.md',
-};
+export const RISKS = ['trivial', 'low', 'medium', 'high'];
+const rank = (r) => RISKS.indexOf(String(r || '').toLowerCase());
 
-export function designFile(root, changeDir, skill) {
-  const rel = DESIGN_FILES[skill];
-  if (!rel) return null;
-  return rel.startsWith('docs/') ? path.join(root, rel) : path.join(changeDir, rel);
+/** Risk of a change from files: spec.md risk, else legacy intent.md risk; -1 when none. */
+export function fileRisk(changeDir) {
+  for (const f of ['spec.md', 'intent.md']) {
+    const fm = readFrontmatter(path.join(changeDir, f));
+    if (fm && rank(fm.risk) >= 0) return rank(fm.risk);
+  }
+  return -1;
 }
 
-/** The `requires:` list of design/design.md as an array of skill names ([] when absent). */
-export function designRequires(changeDir) {
-  const fm = readFrontmatter(path.join(changeDir, 'design', 'design.md'));
-  const r = fm && fm.requires;
-  if (Array.isArray(r)) return r;
-  if (typeof r === 'string' && r.trim()) return r.split(',').map((x) => x.trim()).filter(Boolean);
-  return [];
+/** Highest risk of the given ranks; medium when none is known. Returns a name from RISKS. */
+export function highestRisk(...ranks) {
+  const known = ranks.filter((r) => r >= 0);
+  return RISKS[known.length ? Math.max(...known) : 2];
+}
+export const riskRank = rank;
+
+export function hasHeading(file, title) {
+  try { return new RegExp(`^##\\s+${title}\\b`, 'im').test(fs.readFileSync(file, 'utf8')); } catch { return false; }
 }
 
-/** Design progress for a change: design.md state plus each required artifact. */
-export function designState(root, changeDir) {
-  const designMd = path.join(changeDir, 'design', 'design.md');
-  const exists = fs.existsSync(designMd);
-  const items = designRequires(changeDir)
-    .filter((s) => DESIGN_FILES[s])
-    .map((skill) => {
-      const file = designFile(root, changeDir, skill);
-      return { skill, rel: DESIGN_FILES[skill], exists: fs.existsSync(file), accepted: isAccepted(file) };
-    });
-  const unknown = designRequires(changeDir).filter((s) => !DESIGN_FILES[s]);
-  return { exists, accepted: isAccepted(designMd), items, unknown };
+/** Effective risk of a change: highest of spec.md (else intent.md) and plan.md. */
+export function changeRisk(changeDir) {
+  return highestRisk(fileRisk(changeDir), rank((readFrontmatter(path.join(changeDir, 'plan.md')) || {}).risk));
 }

@@ -21,5 +21,29 @@
         ]
       }
     ]
+  },
+  "permissions": {
+    "deny": [
+      "Edit(.claude/hooks/**)",
+      "Write(.claude/hooks/**)",
+      "Edit(.claude/settings.json)",
+      "Write(.claude/settings.json)",
+      "Edit(.claude/settings.local.json)",
+      "Write(.claude/settings.local.json)",
+      "Edit(.sdlc/config.json)",
+      "Write(.sdlc/config.json)",
+      "Edit(.sdlc/kit-lock.json)",
+      "Write(.sdlc/kit-lock.json)",
+      "Edit(.sdlc/bypass.log)",
+      "Write(.sdlc/bypass.log)",
+      "Edit(.sdlc/bin/**)",
+      "Write(.sdlc/bin/**)",
+      "Edit(.github/workflows/sdlc-ci.yml)",
+      "Write(.github/workflows/sdlc-ci.yml)",
+      "Edit(.github/workflows/sdlc-accept.yml)",
+      "Write(.github/workflows/sdlc-accept.yml)",
+      "Edit(.github/CODEOWNERS)",
+      "Write(.github/CODEOWNERS)"
+    ]
   }
 }

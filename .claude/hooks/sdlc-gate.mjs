@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   DEFAULT_ALLOWLIST, readStdinJson, projectRoot, readConfig, readFrontmatter, isAccepted,
-  matchesAny, relToRoot, currentBranch, appendBypassLog, activeChange, designState, DESIGN_FILES,
+  matchesAny, relToRoot, currentBranch, appendBypassLog, activeChange, fileRisk, highestRisk, changeRisk, riskRank, hasHeading,
+  parseFrontmatter,
 } from './lib.mjs';
 
 class Block extends Error {}
@@ -13,8 +14,8 @@ const block = (msg) => { throw new Block(msg); };
 const ACCEPT_RE = /^\s*status:\s*["']?accepted\b/im;
 const ACCEPTED_BY_RE = /^\s*accepted_by:[ \t]*["']?[^\s"'#]/im;
 const ARTIFACT_RE = /^intent\/([^/]+)\/(intent|spec|plan|incident)\.md$/;
+const DESIGN_MD_RE = /^intent\/[^/]+\/design\/design\.md$/;
 const DESIGN_RE = /^intent\/([^/]+)\/design\/.+$/;
-const DESIGN_MD_RE = /^intent\/[^/]+\/design\/[^/]+\.md$/;
 const HUMAN_ONLY = 'Only a human may accept an artifact: open the file and set status, accepted_by and accepted_at yourself.';
 
 function newTexts(tool, ti) {
@@ -35,11 +36,16 @@ function secretName(base) {
   return /\.(pem|key)$/.test(base) || /^id_rsa/.test(base) || /^credentials/.test(base) || /^secrets\./.test(base);
 }
 
+// Primary protection is permissions.deny in settings.json; this is the second line of defense.
 const PROTECTED = [
   '.claude/hooks/**', '.claude/settings.json', '.claude/settings.local.json', '.sdlc/config.json',
-  '.sdlc/kit-lock.json', '.sdlc/bypass.log', '.github/workflows/sdlc-ci.yml', '.github/CODEOWNERS',
+  '.sdlc/kit-lock.json', '.sdlc/bypass.log', '.sdlc/bin/**', '.github/workflows/sdlc-ci.yml',
+  '.github/workflows/sdlc-accept.yml', '.github/CODEOWNERS',
 ];
-const PROTECTED_RE = /(\.claude\/hooks\/|\.claude\/settings(\.local)?\.json|\.sdlc\/config\.json|\.sdlc\/kit-lock\.json|\.sdlc\/bypass\.log|\.github\/workflows\/sdlc-ci\.yml|\.github\/CODEOWNERS)/;
+const PROTECTED_RE = /(\.claude\/hooks\/|\.claude\/settings(\.local)?\.json|\.sdlc\/config\.json|\.sdlc\/kit-lock\.json|\.sdlc\/bypass\.log|\.sdlc\/bin\/|\.github\/workflows\/sdlc-(ci|accept)\.yml|\.github\/CODEOWNERS)/;
+const ACCEPT_CMD_RE = /\bai-sdlc(?:\.mjs)?\s+accept\b|\baccept\.mjs\b/;
+const READ_ONLY_RE = /^\s*(cat|grep|rg|ls|head|tail|wc|diff|less|git\s+(log|diff|show|status))\b/;
+const HOW_TO_ACCEPT = 'Ask the human to accept it: comment `/accept <stage>` on the PR, or run `npx github:hoanhoang-agilityio/ai-sdlc accept <stage>`.';
 const MUTATE_RE = /(sed\s+(-[a-zA-Z]*i|--in-place)|perl\s+-[a-zA-Z]*i|\btee\b|>>?|\becho\b|\bprintf\b|\bpython3?\b|node\s+-e|\bawk\b|cat\s*<<|\brm\b|\bmv\b|\bcp\b|\btruncate\b|\bchmod\b|git\s+checkout\s+--|git\s+restore)/;
 
 function checkBash(root, cfg, cmd) {
@@ -50,7 +56,10 @@ function checkBash(root, cfg, cmd) {
   }
   for (const seg of probe.split(/&&|\|\||;|\n|\|/)) {
     const m = PROTECTED_RE.exec(seg);
-    if (m && MUTATE_RE.test(seg)) block(`${m[1].replace(/\/$/, '')} is protected; propose the change and ask the human to apply it.`);
+    if (m && MUTATE_RE.test(seg) && !/^\s*git\s+(?:-\S+\s+)*commit\b/.test(seg)) block(`${m[1].replace(/\/$/, '')} is protected; propose the change and ask the human to apply it.`);
+  }
+  for (const seg of probe.split(/&&|\|\||;|\n|\|/)) {
+    if (ACCEPT_CMD_RE.test(seg) && !READ_ONLY_RE.test(seg)) block(`Blocked: only a human may accept an artifact. ${HOW_TO_ACCEPT}`);
   }
   const def = (cfg && cfg.defaultBranch) || 'main';
   const branches = new Set(['main', 'master', def]);
@@ -86,6 +95,25 @@ function checkBash(root, cfg, cmd) {
   }
 }
 
+function checkPlan(root, name, abs, texts) {
+  const dir = path.dirname(abs);
+  let planRisk = riskRank((readFrontmatter(abs) || {}).risk);
+  for (const t of texts) { const r = riskRank(parseFrontmatter(t).risk); if (r >= 0) planRisk = r; }
+  const risk = highestRisk(fileRisk(dir), planRisk);
+  if (risk === 'trivial' || risk === 'low') return;
+  const missing = [];
+  const design = path.join(dir, 'design', 'design.md');
+  if (!isAccepted(path.join(dir, 'spec.md'))) missing.push('spec.md accepted (/accept spec)');
+  if (!isAccepted(design)) missing.push('design/design.md accepted (/accept design)');
+  // v0.2 compatibility: an accepted design/test-strategy.md or design/security.md also satisfies these.
+  const legacy = (f) => isAccepted(path.join(dir, 'design', f));
+  if (!hasHeading(design, 'Test strategy') && !legacy('test-strategy.md')) missing.push('a "## Test strategy" heading in design/design.md');
+  if (risk === 'high' && !hasHeading(design, 'Security') && !legacy('security.md')) missing.push('a "## Security" heading in design/design.md');
+  if (missing.length) {
+    block(`Blocked: plan.md in intent/${name}/ is risk ${risk} and still needs: ${missing.join('; ')}. ${HOW_TO_ACCEPT}`);
+  }
+}
+
 function checkFile(root, cfg, tool, ti) {
   const target = targetPath(ti);
   const rel = relToRoot(root, target);
@@ -104,61 +132,34 @@ function checkFile(root, cfg, tool, ti) {
   // Rule 5
   if (secretName(path.basename(rel))) block(`Blocked: ${rel} looks like a secrets file. Edit it yourself; use .env.example for templates.`);
 
-  // Rule 2 (frozen): design markdown, design-system files, ADRs
-  const dsDir = path.join(root, 'docs', 'design-system');
-  if (DESIGN_MD_RE.test(rel) || rel === 'docs/design-system/design-system.md' || /^docs\/adr\/[^/]+\.md$/.test(rel)) {
+  // Frozen: accepted design.md and ADRs; other design/ files follow design.md
+  if (DESIGN_MD_RE.test(rel) || /^docs\/adr\/[^/]+\.md$/.test(rel)) {
     if (isAccepted(abs)) block(`Blocked: ${rel} is accepted and frozen. A human must set status: draft to reopen it.`);
   }
-  if ((rel === 'docs/design-system/tokens.json' || rel === 'docs/design-system/components.md') && isAccepted(path.join(dsDir, 'design-system.md'))) {
-    block(`Blocked: ${rel} is frozen because docs/design-system/design-system.md is accepted. A human must set it to draft to reopen it.`);
-  }
-
-  // Rule 2 (frozen companions): contract files follow their accepted artifact
-  const cm = /^(intent\/[^/]+\/design)\/(openapi\.ya?ml|asyncapi\.ya?ml|[^/]+\.graphql|prototype\/.+)$/.exec(rel);
-  if (cm) {
-    const owner = cm[2].startsWith('prototype/') ? 'prototype.md' : 'api.md';
-    if (isAccepted(path.join(root, cm[1], owner))) block(`Blocked: ${rel} is frozen because ${cm[1]}/${owner} is accepted. A human must set it to draft to reopen it.`);
-  }
-
-  // Rule 3 (design): any file under intent/<d>/design/ needs an accepted spec.md
   const dm = DESIGN_RE.exec(rel);
-  if (dm && !isAccepted(path.join(root, 'intent', dm[1], 'spec.md'))) {
-    block(`Blocked: ${rel} needs an accepted spec.md in intent/${dm[1]}/. Ask the human to review and accept spec.md first.`);
+  if (dm) {
+    const spec = path.join(root, 'intent', dm[1], 'spec.md');
+    if (!isAccepted(spec)) block(`Blocked: ${rel} needs an accepted spec.md in intent/${dm[1]}/. ${HOW_TO_ACCEPT.replace('<stage>', 'spec')}`);
+    if (!rel.endsWith('/design/design.md') && isAccepted(path.join(root, 'intent', dm[1], 'design', 'design.md'))) {
+      block(`Blocked: ${rel} is frozen because intent/${dm[1]}/design/design.md is accepted. A human must set it to draft to reopen it.`);
+    }
   }
 
-  // Rule 2 + 3
+  // Frozen artifacts + plan prerequisites
   const m = ARTIFACT_RE.exec(rel);
   if (m) {
     if (isAccepted(abs)) block(`Blocked: ${rel} is accepted and frozen. A human must set status: draft to reopen it.`);
-    const dir = path.dirname(abs);
-    const kind = m[2];
-    if (kind === 'spec' && !isAccepted(path.join(dir, 'intent.md'))) {
-      block(`Blocked: spec.md needs an accepted intent.md in intent/${m[1]}/. Ask the human to review and accept intent.md first.`);
-    }
-    if (kind === 'plan') {
-      const ifm = readFrontmatter(path.join(dir, 'intent.md'));
-      const intentOk = isAccepted(path.join(dir, 'intent.md'));
-      const low = intentOk && String(ifm && ifm.risk || '').toLowerCase() === 'low';
-      if (!low) {
-        const missing = [];
-        if (!isAccepted(path.join(dir, 'spec.md'))) missing.push('spec.md');
-        const ds = designState(root, dir);
-        if (ds.unknown.length) block(`Blocked: design.md requires unknown artifact '${ds.unknown[0]}'; valid: ${Object.keys(DESIGN_FILES).join(', ')}. Ask the human to fix requires: in intent/${m[1]}/design/design.md.`);
-        if (!ds.accepted) missing.push('design/design.md');
-        for (const it of ds.items) if (!it.accepted) missing.push(it.rel);
-        if (missing.length) {
-          block(`Blocked: plan.md in intent/${m[1]}/ needs these accepted first (or an accepted intent.md with risk: low): ${missing.join(', ')}. Ask the human to review and accept them.`);
-        }
-      }
-    }
+    if (m[2] === 'plan') checkPlan(root, m[1], abs, texts);
   }
 
   // Rule 4
   const allow = Array.isArray(cfg.codePathsAllowlist) ? cfg.codePathsAllowlist : DEFAULT_ALLOWLIST;
   if (!matchesAny(rel, allow)) {
     const act = activeChange(root);
-    if (!act) block(`Blocked: ${rel} is code and no change is active. Write intent -> (spec) -> plan, get the plan accepted, then run the build skill (it writes .sdlc/active).`);
-    if (!isAccepted(path.join(act.dir, 'plan.md'))) block(`Blocked: active change intent/${act.name}/ has no accepted plan.md. Ask the human to review and accept plan.md.`);
+    if (!act) block(`Blocked: ${rel} is code and no change is active. Write spec -> (design) -> plan, get the plan accepted (or plan risk: trivial), then run the build skill (it writes .sdlc/active).`);
+    const plan = path.join(act.dir, 'plan.md');
+    const trivial = changeRisk(act.dir) === 'trivial';
+    if (!isAccepted(plan) && !trivial) block(`Blocked: active change intent/${act.name}/ has no accepted plan.md (and plan risk is not trivial). ${HOW_TO_ACCEPT.replace('<stage>', 'plan')}`);
   }
 }
 

@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { readStdinJson, projectRoot, readConfig, activeChange, isAccepted } from './lib.mjs';
+import { readStdinJson, projectRoot, readConfig, activeChange, isAccepted, changeRisk } from './lib.mjs';
 
 try {
   const input = readStdinJson();
@@ -11,7 +11,7 @@ try {
   const cfg = readConfig(root);
   if (!cfg || !cfg.testCommand) process.exit(0);
   const act = activeChange(root);
-  if (!act || !isAccepted(path.join(act.dir, 'plan.md'))) process.exit(0);
+  if (!act || !(isAccepted(path.join(act.dir, 'plan.md')) || changeRisk(act.dir) === 'trivial')) process.exit(0);
 
   const st = spawnSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' });
   if (st.status === 0) {

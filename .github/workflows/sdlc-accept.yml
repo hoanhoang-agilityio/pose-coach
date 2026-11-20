@@ -1,0 +1,101 @@
+name: sdlc-accept
+
+# A code owner comments `/accept spec|design|plan|incident` on a PR; this workflow sets the
+# acceptance fields on the PR branch and re-runs the SDLC gate. It never executes code from the PR branch.
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  accept:
+    if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/accept ') }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.issue.number }}
+      LOGIN: ${{ github.event.comment.user.login }}
+      ASSOC: ${{ github.event.comment.author_association }}
+      COMMENT: ${{ github.event.comment.body }}
+    steps:
+      - name: Parse the comment and look up the PR
+        id: pr
+        run: |
+          STAGE=$(printf '%s' "$COMMENT" | head -n1 | sed -nE 's#^/accept (spec|design|plan|incident)([[:space:]].*)?$#\1#p')
+          if [ -z "$STAGE" ]; then echo "Not an accept command."; echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" > pr.json
+          FORK=$(jq -r '.head.repo.full_name != .base.repo.full_name' pr.json)
+          if [ "$FORK" = "true" ]; then
+            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "❌ /accept is not available on PRs from forks."
+            echo "ok=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          {
+            echo "ok=true"
+            echo "stage=$STAGE"
+            echo "branch=$(jq -r '.head.ref' pr.json)"
+            echo "default=$(jq -r '.base.repo.default_branch' pr.json)"
+          } >> "$GITHUB_OUTPUT"
+      - name: Check out the default branch (trusted code and config)
+        if: ${{ steps.pr.outputs.ok == 'true' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.default }}
+          path: base
+      - name: Check who may accept
+        id: auth
+        if: ${{ steps.pr.outputs.ok == 'true' }}
+        run: |
+          ALLOWED=false
+          if [ "$ASSOC" = "OWNER" ]; then ALLOWED=true; fi
+          if node -e 'const c=require("./base/.sdlc/config.json");process.exit(((c.roles||{}).codeOwners||[]).map((x)=>String(x).replace(/^@/,"").toLowerCase()).includes(process.env.LOGIN.toLowerCase())?0:1)'; then ALLOWED=true; fi
+          echo "allowed=$ALLOWED" >> "$GITHUB_OUTPUT"
+          if [ "$ALLOWED" != "true" ]; then
+            gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "❌ @$LOGIN is not the repository owner or listed in roles.codeOwners in .sdlc/config.json, so cannot accept."
+          fi
+      - name: Check out the PR branch (data only)
+        if: ${{ steps.auth.outputs.allowed == 'true' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.branch }}
+          path: head
+          fetch-depth: 0
+      - name: Accept
+        id: accept
+        if: ${{ steps.auth.outputs.allowed == 'true' }}
+        working-directory: head
+        env:
+          STAGE: ${{ steps.pr.outputs.stage }}
+          BRANCH: ${{ steps.pr.outputs.branch }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Resolve the change from the PR body (intent/NNN-slug), else let accept.mjs pick the only draft.
+          CHANGE=$(jq -r '.body // ""' ../pr.json | grep -oE 'intent/[0-9]{3}-[A-Za-z0-9._-]+' | head -n1 | sed 's#^intent/##')
+          set +e
+          node ../base/.sdlc/bin/accept.mjs "$STAGE" $CHANGE --by "$LOGIN" > ../result.txt 2>&1
+          RC=$?
+          set -e
+          cat ../result.txt
+          echo "rc=$RC" >> "$GITHUB_OUTPUT"
+          if [ "$RC" = "0" ] && [ -n "$(git log origin/$BRANCH..HEAD --oneline)" ]; then
+            git push origin "HEAD:$BRANCH"
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Re-run the SDLC gate
+        if: ${{ steps.accept.outputs.pushed == 'true' }}
+        env:
+          BRANCH: ${{ steps.pr.outputs.branch }}
+        run: gh workflow run sdlc-ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH" -f pr="$PR"
+      - name: Reply on the PR
+        if: ${{ always() && steps.accept.outcome != 'skipped' }}
+        env:
+          RC: ${{ steps.accept.outputs.rc }}
+          STAGE: ${{ steps.pr.outputs.stage }}
+        run: |
+          if [ "$RC" = "0" ]; then ICON="✅"; else ICON="❌"; fi
+          { echo "$ICON /accept $STAGE by @$LOGIN"; echo; echo '```'; cat result.txt; echo '```'; } > reply.md
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file reply.md
