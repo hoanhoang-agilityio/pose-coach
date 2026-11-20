@@ -1,12 +1,12 @@
 ## Summary
 <!-- What changed and why, in 2-3 sentences. -->
 
-## Intent
-<!-- Required. Link the change, e.g. intent/001-example-slug -->
+## Change
+<!-- Required. Link the change folder, e.g. intent/001-example-slug -->
 intent/NNN-slug
 
 ## Risk tier
-<!-- low | medium | high. Touching sensitivePaths is at least medium. -->
+<!-- trivial | low | medium | high. Touching sensitivePaths is high. -->
 
 ## Testing
 <!-- Tests added, commands run, results. -->
@@ -15,5 +15,5 @@ intent/NNN-slug
 <!-- Revert commit, flag off, down-migration. See plan.md Rollback. -->
 
 ## Human review required
-- [ ] Required human approvals for this tier: low 1, medium 1, high 2 (CODEOWNERS)
+- [ ] Required human approvals for this tier: trivial/low 1, medium 1, high 2 (CODEOWNERS)
 - [ ] An agent approval does not count; a human merges

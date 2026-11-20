@@ -1,26 +1,23 @@
 ---
-status: draft        # draft | accepted | rejected (only a human sets accepted)
-risk: medium         # low | medium | high
-accepted_by:
-accepted_at:
-pr:                 # PR URL
+risk: medium         # trivial | low | medium | high
+pr:                  # PR URL
 round: 1
 ---
 
 # Review: <title>
 
 ## Round 1
-Scope: full diff. Angles run: spec coverage, correctness, CLAUDE.md/REVIEW.md rules, performance.
+Scope: full diff. Angles: spec coverage, correctness, rules, performance, design.
 
-| # | Tag | File:line | Finding | Verifier votes |
+| # | Tag | File:line | Finding | Votes |
 | --- | --- | --- | --- | --- |
 | 1 | Important / Nit / Pre-existing | path:12 | description | 3/3 |
 
 ## Security review
-Result of the separate `/security-review` pass. Open findings block merge.
+Result of `/security-review`. Open findings block merge. (Delete if not applicable.)
 
 ## Dropped
-Findings that failed verification or were style-only (one line each).
+Findings that failed verification or were style-only, one line each. (Delete if not applicable.)
 
 ## Approvals needed
-Risk tier, required human approvals, who must approve. Claude never approves or merges.
+Risk tier and required human approvals.
